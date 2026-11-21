@@ -1,139 +1,153 @@
 # pdfcrop
 
-A small, fast command-line tool written in C for **extracting, reordering and reversing pages of a PDF**, and for **dumping the text** of selected pages. It is a safe front end for [qpdf](https://qpdf.sourceforge.io/) (page handling) and `pdftotext` from [poppler](https://poppler.freedesktop.org/) (text extraction).
+A fast, single-file command-line PDF toolkit written in C — a local, scriptable CLI alternative to online PDF suites. It acts as a safe front end for [qpdf](https://qpdf.sourceforge.io/) and optional tools ([poppler](https://poppler.freedesktop.org/), Ghostscript, Tesseract / OCRmyPDF, ImageMagick, LibreOffice, and pyHanko). Each command checks only for the tools it needs and tells you what to install if something is missing.
 
 ```console
-$ pdfcrop book.pdf "1-20,30,last" -o excerpt.pdf
-$ pdfcrop -t book.pdf 5-9 > chapter.txt
+$ pdfcrop merge cover.pdf report.pdf:1-10 -o final.pdf
+$ pdfcrop compress --level medium -j 4 -O smaller/ *.pdf
+$ pdfcrop ocr --lang eng --deskew scan.pdf
+$ pdfcrop watermark --stamp-text "DRAFT {date}" --opacity 0.25 final.pdf
+
 ```
 
 ## Table of contents
 
-- [Features](#features)
-- [Requirements](#requirements)
-- [Installation](#installation)
-  - [1. Install the dependencies](#1-install-the-dependencies)
-  - [2. Compile](#2-compile)
-  - [3. Install](#3-install)
-  - [Uninstall](#uninstall)
-  - [Optional: Makefile](#optional-makefile)
-- [Usage](#usage)
-- [Page selection syntax](#page-selection-syntax)
-- [Options](#options)
-- [Examples](#examples)
-- [Working with encrypted PDFs](#working-with-encrypted-pdfs)
-- [Text extraction](#text-extraction)
-- [Safety and behaviour details](#safety-and-behaviour-details)
-- [Exit status](#exit-status)
-- [Environment variables](#environment-variables)
-- [Limits](#limits)
-- [Troubleshooting](#troubleshooting)
+* [Features](https://www.google.com/search?q=%23features)
+* [Requirements](https://www.google.com/search?q=%23requirements)
+* [Installation](https://www.google.com/search?q=%23installation)
+* [1. Install the dependencies](https://www.google.com/search?q=%231-install-the-dependencies)
+* [2. Compile](https://www.google.com/search?q=%232-compile)
+* [3. Install](https://www.google.com/search?q=%233-install)
+* [Uninstall](https://www.google.com/search?q=%23uninstall)
+* [Optional: Makefile](https://www.google.com/search?q=%23optional-makefile)
+
+
+* [Usage](https://www.google.com/search?q=%23usage)
+* [Commands](https://www.google.com/search?q=%23commands)
+* [Page selection syntax](https://www.google.com/search?q=%23page-selection-syntax)
+* [Options](https://www.google.com/search?q=%23options)
+* [Examples](https://www.google.com/search?q=%23examples)
+* [Working with encrypted PDFs](https://www.google.com/search?q=%23working-with-encrypted-pdfs)
+* [Batch and parallel processing](https://www.google.com/search?q=%23batch-and-parallel-processing)
+* [Safety and behaviour details](https://www.google.com/search?q=%23safety-and-behaviour-details)
+* [Exit status](https://www.google.com/search?q=%23exit-status)
+* [Environment variables](https://www.google.com/search?q=%23environment-variables)
+* [Limits](https://www.google.com/search?q=%23limits)
+* [Troubleshooting](https://www.google.com/search?q=%23troubleshooting)
 
 ## Features
 
-**Page extraction**
+**Page manipulation**
 
-- Extract any selection of pages into a new PDF.
-- Flexible page expressions: single pages, ranges, reversed ranges, `last`, `all`, `odd`, `even`, and any comma-separated combination.
-- Pages can be repeated or put in any order, so you can also reorder or reverse a document.
-- Output is always written **decrypted**, even when the source is password protected.
-- Optional **linearized** (web-optimised) output.
-- Output is **verified** after writing: `qpdf --check` plus a page-count comparison against the selection (can be disabled).
+* **Extract, reorder, reverse** (`extract`): select pages with flexible expressions (`1-10`, `10-1`, `odd`, `even`, `last`, `all`), repeat pages, or linearize output.
+* **Remove pages** (`remove`): delete selected pages and keep the rest.
+* **Split** (`split`): break a PDF into fixed-size chunks (`--every N`) or custom semicolon-separated ranges (`--ranges`).
+* **Merge** (`merge`): combine multiple PDFs with optional per-file page selections (`file.pdf:1-3,last`).
+* **Rotate** (`rotate`): rotate all or selected pages by multiples of 90 degrees.
+* **Crop** (`crop`): trim page margins in points (`ALL`, `V,H`, or `T,R,B,L`).
+* **Page numbers** (`pagenum`): stamp customizable page numbers (`{n}`, `{total}`) at any position.
 
-**Text extraction**
+**Optimise, convert, and create**
 
-- `--text` dumps the text of the selected pages instead of writing a PDF.
-- Text goes to **stdout** by default (pipe-friendly) or to a file.
-- Page order follows your selection, e.g. `4-1` outputs the text of page 4 first.
-- `--layout` preserves the physical page layout; `--no-page-breaks` removes the form-feed page separators.
-- Always UTF-8.
+* **Compress** (`compress`): lossless recompression via `qpdf`, or lossy presets (`low`, `medium`, `high`), custom DPI downsampling, and grayscale conversion via Ghostscript. Keeps the original untouched if compression produces no size reduction.
+* **Repair** (`repair`): rebuild damaged PDFs using `qpdf`, with automatic Ghostscript fallback.
+* **Convert from PDF** (`convert`): export to `png`, `jpg`, `tiff`, `svg`, `eps`, `ps`, `html`, `txt`, `pdfa`, `docx`, `odt`, and `rtf`.
+* **Create PDF** (`create`): combine images (JPEG natively; PNG/WebP/etc. via ImageMagick), Office/HTML/text files (via LibreOffice), and existing PDFs into a single PDF.
+* **Text extraction** (`text`): dump UTF-8 text to stdout or a file, with optional layout preservation and page-break control.
 
-**Inspection**
+**Security, editing, OCR, and signing**
 
-- `--info` prints the page count and whether the PDF is encrypted.
-- `--dry-run` shows exactly what would be done without writing anything.
+* **Encrypt & decrypt** (`encrypt`, `decrypt`): AES-128 or AES-256 encryption with user/owner passwords and permission restrictions (`print`, `copy`, `modify`, `annotate`, `all`), or clean decryption.
+* **Find & replace text** (`edit`): best-effort literal string replacement inside uncompressed PDF streams via `qpdf --qdf` and `fix-qdf`.
+* **OCR** (`ocr`): make scanned PDFs searchable using `ocrmypdf` (with deskew/rotate/sidecar support) or an automatic `pdftoppm` + `tesseract` fallback.
+* **Watermarks & visual stamps** (`watermark`): overlay or underlay text (with `{date}` expansion), images, or another PDF with configurable position, angle, scale, color, and opacity.
+* **Digital & visual signatures** (`sign`, `verify`): stamp a visible signature, apply cryptographic PKCS#12 signatures via `pyhanko`, and verify signatures with `pdfsig`.
+* **Inspection** (`info`): print file path, size, page count, encryption status, and metadata.
 
-**Passwords**
+**Batching & safety**
 
-- Automatic hidden prompt on a terminal when a password is needed.
-- Non-interactive options for scripts: `--password-file`, `--password-env`, `--password-stdin`.
-- The password is never placed on a command line, so it does not show up in `ps`. It is passed to qpdf through a `0600` temporary file that is deleted on exit.
-
-**Safety**
-
-- Never overwrites an existing file unless `--force` is given.
-- Refuses to write over its own input (detected by inode, so symlinks and hard links cannot fool it).
-- Output is written to a temporary file first and moved into place atomically, so a failed run never leaves a half-written file behind.
-- Temporary files and the terminal state are cleaned up on errors and on Ctrl-C / SIGTERM / SIGHUP.
-
-**Usability**
-
-- Standard `getopt_long` interface with short and long options, `--help` and `--version`.
-- `--quiet` and `--verbose` modes (verbose prints every qpdf / pdftotext command that is run).
-- Coloured error messages on terminals (disable with `NO_COLOR`).
-- Meaningful exit codes for scripting.
-- Backwards-compatible legacy form: `pdfcrop input.pdf "pages" output-name`.
+* Process multiple files at once, read file lists from `--from-list`, run jobs in parallel (`-j N`), continue past errors (`-k`), or replace originals atomically (`--in-place`).
+* Passwords are never placed on the command line (passed via `0600` temp files and zeroed on exit).
+* Never clobbers existing files without `--force`; refuses to overwrite its own input unless `--in-place` is set.
 
 ## Requirements
 
-| Requirement | Needed for | Notes |
-|---|---|---|
-| A C compiler (gcc or clang) | building | C99 or newer, POSIX system |
-| `qpdf` | everything | must be in `$PATH` |
-| `pdftotext` (poppler) | `--text` only | must be in `$PATH` |
+Only a C compiler and `qpdf` are required to build and use the core commands. All other tools are optional and checked at runtime only when invoked.
 
-Developed and tested on Linux. It uses only POSIX interfaces (`fork`, `execvp`, `mkstemp`, `getopt_long`, `termios`), so it should also build on macOS and the BSDs. On Windows, use WSL.
+| Requirement | Needed for | Notes |
+| --- | --- | --- |
+| C compiler (`gcc` or `clang`) | building | C99 or newer, POSIX system, links with `-lm` |
+| `qpdf` (and `fix-qdf`) | all commands except `verify` | must be in `$PATH` (`fix-qdf` is used by `edit`) |
+| `poppler` (`pdftotext`, `pdftoppm`, `pdftocairo`, `pdftohtml`, `pdfinfo`, `pdfsig`) | `text`, `convert`, `ocr` (fallback), `verify`, `info`, page sizing | optional |
+| `gs` (Ghostscript) | lossy `compress`, `crop`, `convert --to pdfa`, `repair` fallback | optional |
+| `ocrmypdf` or `tesseract` | `ocr` | optional (`auto` prefers `ocrmypdf`) |
+| `magick` or `convert` (ImageMagick) | non-JPEG images in `watermark`, `sign`, `create` | optional |
+| `soffice` / `libreoffice` | `convert` to `docx`/`odt`/`rtf`, `create` from Office/HTML/txt | optional |
+| `pyhanko` | cryptographic `sign --cert` | optional (`pip install pyhanko pyhanko-certvalidator`) |
+
+Developed for POSIX systems (Linux, macOS, BSDs; use WSL on Windows).
 
 ## Installation
 
 ### 1. Install the dependencies
+
+Install the core requirements (`qpdf` and `poppler`), plus any optional tools you plan to use.
 
 **Debian / Ubuntu / Linux Mint**
 
 ```sh
 sudo apt update
 sudo apt install build-essential qpdf poppler-utils
+sudo apt install ghostscript ocrmypdf tesseract-ocr imagemagick libreoffice
+
 ```
 
 **Fedora / RHEL / Rocky / Alma**
 
 ```sh
 sudo dnf install gcc make qpdf poppler-utils
+sudo dnf install ghostscript ocrmypdf tesseract ImageMagick libreoffice
+
 ```
 
 **Arch / Manjaro**
 
 ```sh
 sudo pacman -S base-devel qpdf poppler
+sudo pacman -S ghostscript ocrmypdf tesseract tesseract-data-eng imagemagick libreoffice-fresh
+
 ```
 
 **openSUSE**
 
 ```sh
 sudo zypper install gcc make qpdf poppler-tools
+sudo zypper install ghostscript tesseract-ocr ImageMagick libreoffice
+
 ```
 
 **Alpine**
 
 ```sh
 sudo apk add build-base qpdf poppler-utils
+sudo apk add ghostscript tesseract-ocr imagemagick libreoffice
+
 ```
 
 **macOS (Homebrew)**
 
 ```sh
-xcode-select --install      # compiler, if not already installed
+xcode-select --install
 brew install qpdf poppler
+brew install ghostscript ocrmypdf tesseract imagemagick libreoffice
+
 ```
 
-If you only need page extraction and never use `--text`, `poppler` is optional.
-
-Check that everything is available:
+For cryptographic signing with `sign --cert`:
 
 ```sh
-qpdf --version
-pdftotext -v        # only needed for --text
-cc --version
+pip install pyhanko pyhanko-certvalidator
+
 ```
 
 ### 2. Compile
@@ -141,16 +155,16 @@ cc --version
 From the directory containing `pdfcrop.c`:
 
 ```sh
-cc -O2 -Wall -Wextra -o pdfcrop pdfcrop.c
+cc -O2 -Wall -Wextra -o pdfcrop pdfcrop.c -lm
+
 ```
 
-This produces an executable called `pdfcrop` in the current directory. It should compile with no warnings. You can use `gcc` or `clang` instead of `cc`.
-
-Quick test:
+Verify the build:
 
 ```sh
 ./pdfcrop --version
 ./pdfcrop --help
+
 ```
 
 ### 3. Install
@@ -159,6 +173,7 @@ Quick test:
 
 ```sh
 sudo install -m 755 pdfcrop /usr/local/bin/pdfcrop
+
 ```
 
 **Current user only** (no root needed):
@@ -166,39 +181,36 @@ sudo install -m 755 pdfcrop /usr/local/bin/pdfcrop
 ```sh
 mkdir -p ~/.local/bin
 install -m 755 pdfcrop ~/.local/bin/pdfcrop
+
 ```
 
-Make sure `~/.local/bin` is on your `PATH`. If it is not, add this to your `~/.bashrc` or `~/.zshrc` and restart the shell:
+Ensure `~/.local/bin` is on your `PATH`:
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
-```
 
-Verify the installation:
-
-```sh
-command -v pdfcrop
-pdfcrop --version
 ```
 
 ### Uninstall
 
 ```sh
-sudo rm /usr/local/bin/pdfcrop      # system-wide install
-rm ~/.local/bin/pdfcrop             # per-user install
+sudo rm /usr/local/bin/pdfcrop
+rm ~/.local/bin/pdfcrop
+
 ```
 
 ### Optional: Makefile
 
-If you prefer `make`, save this next to `pdfcrop.c` as `Makefile` (recipe lines must start with a tab):
+Save this next to `pdfcrop.c` as `Makefile` (recipe lines must start with a tab):
 
 ```make
 CC      ?= cc
 CFLAGS  ?= -O2 -Wall -Wextra
+LDLIBS  ?= -lm
 PREFIX  ?= /usr/local
 
 pdfcrop: pdfcrop.c
-	$(CC) $(CFLAGS) -o $@ $<
+	$(CC) $(CFLAGS) -o $@ $< $(LDLIBS)
 
 install: pdfcrop
 	install -d $(DESTDIR)$(PREFIX)/bin
@@ -211,206 +223,237 @@ clean:
 	rm -f pdfcrop
 
 .PHONY: install uninstall clean
+
 ```
 
 Then:
 
 ```sh
 make
-sudo make install                 # or: make install PREFIX=$HOME/.local
+sudo make install
+
 ```
 
 ## Usage
 
 ```text
-pdfcrop [OPTIONS] INPUT.pdf PAGES
-pdfcrop [OPTIONS] INPUT.pdf PAGES OUTPUT          (legacy form)
-pdfcrop --text [OPTIONS] INPUT.pdf PAGES
-pdfcrop --info INPUT.pdf
+pdfcrop COMMAND [OPTIONS] FILE...
+pdfcrop [OPTIONS] INPUT.pdf PAGES [OUTPUT]
+
 ```
 
-Options may appear before or after the positional arguments.
+Options may appear before or after positional arguments. If the first positional argument is not a command name (or if a file with that exact name exists in the current directory), `pdfcrop` defaults to `extract` (or `text` / `info` when legacy `-t` / `-i` flags are given).
+
+## Commands
+
+| Command | Summary | Default suffix / output |
+| --- | --- | --- |
+| `extract` | Keep, reorder, or reverse pages | `-pages.pdf` |
+| `remove` | Delete selected pages | `-trimmed.pdf` |
+| `split` | Split into chunks or custom ranges | `<stem>-part001.pdf`, … |
+| `merge` | Combine PDFs (`FILE` or `FILE:PAGES`) | `merged.pdf` |
+| `rotate` | Rotate pages by 90/180/270 degrees | `-rotated.pdf` |
+| `crop` | Trim page margins in points | `-cropped.pdf` |
+| `pagenum` | Add page numbers | `-numbered.pdf` |
+| `compress` | Shrink PDFs (lossless or lossy) | `-compressed.pdf` |
+| `repair` | Rebuild damaged PDFs | `-repaired.pdf` |
+| `convert` | Export PDF to images, vector, HTML, text, PDF/A, or Office | format-dependent |
+| `create` | Convert images / Office / HTML / text into a PDF | `created.pdf` |
+| `text` | Dump UTF-8 text of selected pages | stdout (or `.txt` with `-O`/`-o`) |
+| `encrypt` | Add password and permission restrictions | `-encrypted.pdf` |
+| `decrypt` | Remove password protection | `-decrypted.pdf` |
+| `edit` | Find and replace literal text strings | `-edited.pdf` |
+| `ocr` | Add a searchable text layer to scanned PDFs | `-ocr.pdf` |
+| `watermark` | Stamp text, image, or PDF over/under pages | `-watermarked.pdf` |
+| `sign` | Apply visible and/or PKCS#12 cryptographic signature | `-signed.pdf` |
+| `verify` | Check digital signatures | stdout |
+| `info` | Print file size, page count, encryption, and metadata | stdout |
 
 ## Page selection syntax
 
-`PAGES` is a list of entries separated by a comma, semicolon or newline. Spaces around entries are ignored. Pages are numbered from 1.
+Used by `extract`, `remove`, `rotate`, `text`, `convert`, `watermark`, `pagenum`, `sign`, `split --ranges`, and `merge` (`FILE:PAGES`). Entries are separated by commas, semicolons, or newlines (except `split --ranges`, which uses semicolons to separate output files).
 
 | Entry | Meaning |
-|---|---|
+| --- | --- |
 | `3` | page 3 |
 | `1-10` | pages 1 through 10 |
 | `10-1` | pages 10 down to 1 (reversed) |
-| `last` | the final page |
+| `last` | final page |
 | `5-last` | page 5 through the final page |
-| `last-1` | the whole document, reversed |
+| `last-1` | whole document, reversed |
 | `all` | every page |
 | `odd` | pages 1, 3, 5, … |
 | `even` | pages 2, 4, 6, … |
 | `1-3,7,9-last` | any combination, in the order written |
 
-Pages may be repeated (`1,1,1`), and the output follows the order you write. Any page outside the document is an error, and nothing is written.
-
 ## Options
 
+### Common options
+
 | Option | Description |
-|---|---|
-| `-o, --output FILE` | Output file. Default for PDF mode: `<input>-pages.pdf` in the current directory. `.pdf` is appended if missing. With `--text`: stdout (or `-` explicitly), or a file path used exactly as given. |
-| `-f, --force` | Overwrite the output file if it exists. |
-| `-n, --dry-run` | Print the summary and the resolved page selection, write nothing. |
-| `-i, --info` | Print file path, page count and encryption status, then exit. |
-| `-t, --text` | Extract text of the selected pages instead of writing a PDF. Needs `pdftotext`. |
-| `--layout` | With `--text`: keep the physical layout of the page. |
-| `--no-page-breaks` | With `--text`: do not insert a form feed between pages. |
-| `--password-file FILE` | Read the PDF password from the first line of `FILE`. |
-| `--password-env VAR` | Read the PDF password from environment variable `VAR`. |
-| `--password-stdin` | Read the PDF password from one line on standard input. |
-| `--linearize` | Write a linearized (web-optimised) PDF. PDF mode only. |
-| `--no-verify` | Skip the post-write `qpdf --check` and page-count check. |
+| --- | --- |
+| `-o, --output FILE` | Output file path (single input, `merge`, or `create`; `-` = stdout for `text`). |
+| `-O, --outdir DIR` | Write outputs into `DIR` (created automatically if missing). |
+| `--suffix TEXT` | Override the default output filename suffix. |
+| `--in-place` | Replace the original file atomically (not valid for `text`, `convert`, `merge`, `create`, `split`, `info`, `verify`). |
+| `-f, --force` | Overwrite existing outputs. |
+| `-n, --dry-run` | Show what would happen without writing anything. |
+| `-j, --jobs N` | Process `N` files in parallel (disables interactive password prompts). |
+| `-k, --keep-going` | Continue processing remaining files if one fails. |
+| `--from-list FILE` | Read additional input paths from `FILE` (one per line, `#` comments ignored, `-` = stdin). |
+| `--password-file FILE` | Input PDF password from the first line of `FILE`. |
+| `--password-env VAR` | Input PDF password from environment variable `VAR`. |
+| `--password-stdin` | Input PDF password from stdin. |
+| `--no-verify` | Skip post-write `qpdf --check` and page-count verification. |
 | `-q, --quiet` | Print only errors. |
-| `-v, --verbose` | Print the qpdf / pdftotext commands being run. |
+| `-v, --verbose` | Print external commands as they run. |
 | `-h, --help` | Show help. |
 | `-V, --version` | Show version. |
 
-Rules:
+### Command-specific options
 
-- Only one of `--password-file`, `--password-env`, `--password-stdin` may be used.
-- `--quiet` and `--verbose` cannot be combined.
-- `--layout` and `--no-page-breaks` require `--text`.
-- `--text` cannot be combined with `--info`.
-- `--info` takes exactly one argument, the input file.
+| Command(s) | Options |
+| --- | --- |
+| `extract`, `remove`, `text`, `convert`, `rotate` | `--pages EXPR`, `--linearize`, `--layout`, `--no-page-breaks`, legacy `-t` / `-i` |
+| `split` | `--every N` (default `1`), `--ranges "1-3;4-last"` |
+| `rotate` | `--angle DEG` (multiple of 90, default `90`), `--on PAGES` (or `--pages`) |
+| `crop` | `--margins SPEC` in points: `ALL`, `V,H`, or `T,R,B,L` |
+| `pagenum` | `--format TEXT` (default `{n} / {total}`), `--start N` (default `1`), `--position`, `--size PT`, `--color`, `--opacity`, `--on PAGES` |
+| `compress` | `--level lossless|low|medium|high` (default `medium`), `--dpi N`, `--grayscale` |
+| `convert` | `--to png|jpg|tiff|svg|eps|ps|html|txt|pdfa|docx|odt|rtf`, `--dpi N` (default `150`), `--quality N` (JPEG) |
+| `encrypt` | `--user-password-file F`, `--user-password-env V`, `--owner-password-file F`, `--owner-password-env V`, `--deny print,copy,modify,annotate|all`, `--bits 128|256` (default `256`) |
+| `edit` | `--replace 'OLD=>NEW'` (repeatable, up to 64 per run) |
+| `ocr` | `--lang CODES` (default `eng`, e.g. `deu+eng`), `--engine auto|ocrmypdf|tesseract`, `--sidecar FILE.txt`, `--deskew`, `--rotate`, `--force-ocr` |
+| `watermark`, `sign` | `--stamp-text TEXT` (`{date}` supported), `--stamp-image JPG/PNG`, `--stamp-pdf FILE`, `--on PAGES` (`watermark`: `all`, `sign`: `last`), `--layer over|under`, `--position center|top|bottom|left|right|top-left|top-right|bottom-left|bottom-right`, `--size PT`, `--angle DEG`, `--opacity 0-1`, `--scale F`, `--color NAME|#RRGGBB` |
+| `sign` (digital) | `--cert FILE.p12`, `--cert-pass-file F`, `--cert-pass-env V`, `--reason TEXT`, `--location TEXT`, `--field NAME` |
 
 ## Examples
 
-**Extract pages**
+**Extract, remove, split, merge, rotate, crop, and number pages**
 
 ```sh
-pdfcrop book.pdf 1-20 -o intro.pdf             # first 20 pages
-pdfcrop book.pdf "1-20,30,40-35" -o mix.pdf    # ranges, a single page, a reversed range
-pdfcrop book.pdf odd -o odd.pdf                # odd pages only
-pdfcrop book.pdf "5-last" -o rest.pdf          # page 5 to the end
-pdfcrop book.pdf last-1 -o reversed.pdf        # whole document in reverse
-pdfcrop book.pdf all -o copy.pdf --linearize   # full copy, web optimised
-pdfcrop book.pdf 1 -o out/title                # creates out/title.pdf (the out/ directory must exist)
-pdfcrop book.pdf 1-3                           # creates book-pages.pdf
-pdfcrop book.pdf 1-3 result                    # legacy form, creates result.pdf
+pdfcrop book.pdf "1-20,30,40-35" -o mix.pdf
+pdfcrop remove book.pdf "2,5-7" -o cleaned.pdf
+pdfcrop split --every 5 -O parts/ book.pdf
+pdfcrop split --ranges "1-3;4-10;11-last" -O chapters/ book.pdf
+pdfcrop merge cover.pdf body.pdf:1-20 appendix.pdf:last -o complete.pdf
+pdfcrop rotate --angle 90 --on odd book.pdf
+pdfcrop crop --margins 36,24 paper.pdf
+pdfcrop pagenum --position bottom-right --format "Page {n} of {total}" report.pdf
+
 ```
 
-**Inspect and preview**
+**Compress, repair, convert, create, and extract text**
 
 ```sh
-pdfcrop --info book.pdf
-pdfcrop -n book.pdf "1-5,last"       # see what would happen
-pdfcrop -v book.pdf 1-3 -o x.pdf     # show the qpdf commands
+pdfcrop compress --level medium report.pdf
+pdfcrop compress --level high --dpi 120 --grayscale scan.pdf
+pdfcrop compress --level lossless --in-place report.pdf
+pdfcrop repair broken.pdf
+pdfcrop convert --to png --dpi 200 --pages 1-3 slides.pdf -O images/
+pdfcrop convert --to docx report.pdf
+pdfcrop convert --to pdfa archive.pdf
+pdfcrop create photo1.jpg photo2.png notes.docx -o bundle.pdf
+pdfcrop text --layout invoice.pdf 1
+
 ```
 
-**Extract text**
+**Encrypt, decrypt, edit, OCR, watermark, and sign**
 
 ```sh
-pdfcrop -t book.pdf 5-9                           # text to the terminal
-pdfcrop -t book.pdf 5-9 > chapter.txt             # redirect to a file
-pdfcrop -t book.pdf 5-9 -o chapter.txt            # write a file directly
-pdfcrop -t --layout invoice.pdf 1                 # keep columns / tables aligned
-pdfcrop -t --no-page-breaks book.pdf all | wc -w  # word count without form feeds
-pdfcrop -t book.pdf all | grep -n "keyword"       # search a PDF
-```
+pdfcrop encrypt --bits 256 --deny print,copy secret.pdf
+pdfcrop decrypt --password-file ~/.secrets/pw secret-encrypted.pdf
+pdfcrop edit --replace 'Draft=>Final' --replace '2025=>2026' contract.pdf
+pdfcrop ocr --lang eng --deskew --rotate --sidecar out.txt scan.pdf
+pdfcrop watermark --stamp-text "CONFIDENTIAL {date}" --color red --opacity 0.2 report.pdf
+pdfcrop sign --stamp-image sig.png --position bottom-right --on last contract.pdf
+pdfcrop sign --cert me.p12 --reason "Approved" --location "Amsterdam" contract.pdf
+pdfcrop verify contract-signed.pdf
+pdfcrop info report.pdf
 
-**Scripting**
-
-```sh
-# Split a book into 10-page chunks
-n=$(pdfcrop -i book.pdf | awk '/^Pages:/ {print $2}')
-for ((s = 1; s <= n; s += 10)); do
-    e=$((s + 9)); ((e > n)) && e=$n
-    pdfcrop -q book.pdf "$s-$e" -o "part-$s-$e.pdf" || break
-done
 ```
 
 ## Working with encrypted PDFs
 
-If the PDF requires a password and you did not supply one, `pdfcrop` prompts for it with hidden input (terminal only). In scripts, use one of:
+If an input PDF requires a password and none was provided, `pdfcrop` prompts with hidden input on a terminal (up to two attempts). For scripts or parallel runs (`-j`), supply the password non-interactively:
 
 ```sh
-pdfcrop --password-file ~/.secrets/pdfpw secret.pdf all -o open.pdf
-PDFPW='hunter2' pdfcrop --password-env PDFPW secret.pdf all -o open.pdf
-echo 'hunter2' | pdfcrop --password-stdin secret.pdf all -o open.pdf
+pdfcrop --password-file ~/.secrets/pdfpw extract secret.pdf all -o open.pdf
+PDFPW='hunter2' pdfcrop --password-env PDFPW decrypt secret.pdf
+echo 'hunter2' | pdfcrop --password-stdin info secret.pdf
+
 ```
 
-Notes:
+* Passwords are written to a `0600` temporary file for `qpdf` and deleted on exit or signal; in-memory buffers are zeroed on cleanup.
+* Passwords containing newlines are not supported.
+* When using `encrypt` with `--deny` and no owner password, a random 128-bit owner password is generated automatically so restrictions cannot be trivially stripped.
 
-- If a password is required, none is supplied and there is no terminal to prompt on, `pdfcrop` exits with an error instead of hanging.
-- A wrong password gives `incorrect PDF password`.
-- Passwords containing a newline are not supported.
-- PDF output is **always decrypted**. The summary shows `Source encrypted: yes` and `Output encrypted: no`.
-- Prefer `--password-file` or `--password-stdin` over `--password-env` on shared machines, since environment variables can be visible to other processes of the same user.
+## Batch and parallel processing
 
-## Text extraction
+Most commands accept multiple input files directly or via `--from-list`:
 
-Text mode works in two steps: the selected pages are first extracted into a temporary decrypted PDF (reusing all of the page-selection and password logic above), then `pdftotext` converts that file to UTF-8 text.
+```sh
+pdfcrop compress --level medium -j 4 -k -O compressed/ *.pdf
+find ./scans -name '*.pdf' | pdfcrop ocr --lang eng --from-list - -j 2 -O searchable/
 
-- Output goes to **stdout** unless you pass `-o FILE`. While text goes to stdout, all progress messages go to stderr, so pipes stay clean.
-- With `-o FILE`, the path is used exactly as written (no extension is added), and existing files are protected unless `--force` is given.
-- Pages are separated by a form-feed character (`\f`) unless `--no-page-breaks` is used.
-- `pdftotext` only reads text that is embedded in the PDF. **Scanned documents (images of text) produce empty output**; they need OCR (for example `ocrmypdf`) first.
-- If `pdftotext` is not installed, `--text` fails with a clear message and the rest of the tool is unaffected.
+```
+
+* With `-j N` (`N > 1`), interactive password prompts are disabled; pass `--password-file` or `--password-env` if inputs are encrypted.
+* Use `-k` / `--keep-going` so a single broken file does not halt the rest of the batch.
+* With `extract`, `remove`, or `text` on multiple files, pass `--pages EXPR` so all positional arguments are treated as input files.
 
 ## Safety and behaviour details
 
-- **No clobbering.** Without `--force`, an existing output file is never touched. The final step uses a hard link, which fails atomically if the destination exists. With `--force`, the file is replaced atomically with `rename`.
-- **Same-file protection.** The input and output are compared by device and inode, so the tool will not overwrite its own input, even through a symlink.
-- **Atomic output.** Data is written to a hidden temporary file (`.pdfcrop-XXXXXX`) in the destination directory and moved into place only after it has been verified. In text mode, the intermediate PDF lives in `$TMPDIR` (default `/tmp`).
-- **Verification.** After extraction, `qpdf --check` is run on the result and its page count must equal the number of selected pages. Use `--no-verify` to skip this on very large files.
-- **File permissions.** Output files get normal permissions according to your `umask` (not the `0600` of the temporary file).
-- **Cleanup.** Temporary files (including the password file) are removed on success, on errors and on `SIGINT`/`SIGTERM`/`SIGHUP`. Terminal echo is restored if you press Ctrl-C at the password prompt.
-- **Warnings.** qpdf warnings (for example about slightly damaged PDFs) do not abort the run; hard errors do.
-- **Dry run.** `--dry-run` still validates the input, password and page expression, so it is a good way to check a command before running it. It does not complain about an existing output file.
-- **Compact commands.** Consecutive pages are collapsed to ranges when talking to qpdf (`1,2,3,4` becomes `1-4`), so very large selections do not hit the operating system's argument-length limit.
+* **No clobbering:** Without `--force`, outputs are published via `link()` + `unlink()`, failing atomically if the destination already exists. With `--force` or `--in-place`, `rename()` replaces the target atomically.
+* **Same-file protection:** Input and output are compared by device and inode to prevent accidental self-overwrites unless `--in-place` is explicitly requested.
+* **Atomic writes:** Output files are written to a hidden temporary file in the destination directory and moved into place only after `qpdf --check` succeeds.
+* **Cleanup:** All temporary files and directories are removed on exit, error, `SIGINT`, `SIGTERM`, and `SIGHUP`, and terminal echo is restored if interrupted at a password prompt.
+* **No wasted compression:** If `compress` produces a file equal to or larger than the input, nothing is written and the original is kept.
 
 ## Exit status
 
 | Code | Meaning |
-|---|---|
+| --- | --- |
 | `0` | Success |
-| `1` | Runtime error (bad file, wrong password, invalid pages, qpdf/pdftotext failure, output exists, …) |
+| `1` | Runtime error (missing tool, bad file, wrong password, invalid pages, conversion failure, output exists, …) |
 | `2` | Usage error (bad options or arguments) |
-| `128+N` | Interrupted by signal N (for example 130 for Ctrl-C) |
+| `128+N` | Interrupted by signal `N` (for example `130` for Ctrl-C) |
 
 ## Environment variables
 
 | Variable | Effect |
-|---|---|
-| `TMPDIR` | Directory for the password temp file and, in text mode, the intermediate PDF. Defaults to `/tmp`. |
-| `NO_COLOR` | If set, disables coloured error messages. |
-| *(your choice)* | Any variable named with `--password-env`. |
+| --- | --- |
+| `TMPDIR` | Directory for temporary files, decrypted intermediates, and password files (defaults to `/tmp`). |
+| `NO_COLOR` | Disables coloured warnings and error messages when set. |
+| *(custom)* | Any variable passed to `--password-env`, `--user-password-env`, `--owner-password-env`, or `--cert-pass-env`. |
 
 ## Limits
 
-- At most 1,000,000 pages in a single selection.
-- The resolved page expression passed to qpdf must be under 100,000 characters; for extreme selections, split the work into several runs.
-- Paths are limited to `PATH_MAX` (typically 4096 bytes).
-- Passwords are limited to 4095 bytes and may not contain newlines.
+* Up to `1,000,000` pages per selection; resolved qpdf page expressions must be under `100,000` bytes.
+* Up to `64` `--replace` pairs per `edit` invocation.
+* Paths are limited to `PATH_MAX` (typically 4096 bytes).
+* Passwords are limited to `4095` bytes and may not contain newlines.
 
 ## Troubleshooting
 
-**`qpdf is not installed or not executable`**
-Install qpdf (see [Installation](#1-install-the-dependencies)) and make sure it is on your `PATH`.
-
-**`pdftotext is not installed`**
-Install `poppler-utils` (Debian/Ubuntu/Fedora), `poppler` (Arch/Homebrew) or `poppler-tools` (openSUSE). Only `--text` needs it.
+**`'tool' is not installed or not in PATH`**
+Install the missing package listed in [Requirements](https://www.google.com/search?q=%23requirements) and verify it is on your `$PATH`.
 
 **`output 'x.pdf' already exists (use --force to overwrite)`**
-Choose another name with `-o` or add `--force`.
+Pick a different output path with `-o` / `-O`, use `--in-place`, or pass `--force`.
 
-**`pages must be between 1 and N`**
-A page in your expression is outside the document. Run `pdfcrop --info file.pdf` to see the page count, or use `last`.
+**`text not found` during `edit**`
+`edit` only replaces plain literal strings inside PDF content streams. Text split by kerning, encoded in subset/CID fonts, or stored as scanned images cannot be replaced directly.
+
+**`Text output is empty`**
+The PDF is likely a scan with no embedded text layer. Run `pdfcrop ocr` on it first.
 
 **`PDF is password protected; use --password-file, --password-env or --password-stdin`**
-The PDF needs a password and there is no terminal to prompt on. Supply one with a password option.
+A password is needed, but stdin/stderr is not a terminal (or `-j` parallel mode is active). Supply the password using one of the non-interactive flags.
 
-**`cannot create temporary file in '...'`**
-The destination directory does not exist or is not writable. Create it first (`mkdir -p out`), or check permissions. In text mode, check that `$TMPDIR` is writable.
+**`undefined reference to 'cos'` / `'sin'` when compiling**
+Make sure `-lm` is at the end of the compiler command: `cc -O2 -Wall -Wextra -o pdfcrop pdfcrop.c -lm`.
 
-**Text output is empty**
-The PDF is probably a scan. Run OCR on it first.
+```
 
-**`command not found: pdfcrop`**
-The install directory is not on your `PATH`. See [Install](#3-install).
+```
