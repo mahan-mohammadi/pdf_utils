@@ -454,6 +454,3 @@ A password is needed, but stdin/stderr is not a terminal (or `-j` parallel mode 
 **`undefined reference to 'cos'` / `'sin'` when compiling**
 Make sure `-lm` is at the end of the compiler command: `cc -O2 -Wall -Wextra -o pdfcrop pdfcrop.c -lm`.
 
-```
-
-```
